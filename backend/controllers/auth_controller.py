@@ -1,5 +1,5 @@
-from fastapi import HTTPException, status
-from schemas.auth_schemas import RegisterRequest, LoginRequest, AuthResponse
+from fastapi import HTTPException
+from schemas.auth_schemas import RegisterRequest, LoginRequest
 from utils.auth import hash_password, verify_password, create_token
 from database.connection import client
 from datetime import datetime
@@ -7,38 +7,62 @@ from datetime import datetime
 class AuthController:
 
     @staticmethod
-    async def register_user(request: RegisterRequest):
+    async def register_user(req: RegisterRequest):
         users = client.finance.users
 
-        # Check to see if user exists
-        existing = await users.find_one({"email": request.email})
+        # Check if the email exists
+        existing = await users.find_one({"email": req.email})
         if existing:
-            raise HTTPException(status_code=400, detail="Email already exists")
+            raise HTTPException(400, "Email already exists")
         
-        user = {
-            "name": request.name,
-            "email": request.email,
-            "passwordHash": hash_password(request.password),
+        user_data = {
+            "name": req.name,
+            "email": req.email,
+            "passwordHash": hash_password(req.password),
             "createdAt": datetime.utcnow()
         }
 
-        await users.insert_one(user)
+        # Saves the user
+        await users.insert_one(user_data)
 
-        token = create_token({"email": user["email"], "name": user["name"]})
+        # creating the token
+        token = create_token({
+            "email": user_data["email"],
+            "name": user_data["name"]
+        })
 
-        return AuthResponse(token=token, name=user["name"], email=user["email"])
+
+        return {
+            "message": "User registered successfully",
+            "token": token,
+            "user": {
+                "name": user_data["name"],
+                "email": user_data["email"]
+            }
+        }
     
     @staticmethod
-    async def login_user(request: LoginRequest):
+    async def login_user(req: LoginRequest):
         users = client.finance.users
 
-        user = await users.find_one({"email": request.email})
+        user = await users.find_one({"email": req.email})
         if not user:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            raise HTTPException(401, "Invalid email or password")
         
-        if not verify_password(request.password, user["passwordHash"]):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+        if not verify_password(req.password, user["passwordHash"]):
+            raise HTTPException(401, "Invalid email or password")
         
-        token = create_token({"email": user["email"], "name": user["name"]})
+        # creating the token
+        token = create_token({
+            "email": user["email"],
+            "name": user["name"]
+        })
 
-        return AuthResponse(token=token, name=user["name"], email=user["email"])
+        return {
+            "message": "User logged in successfully",
+            "token": token,
+            "user": {
+                "name": user["name"],
+                "email": user["email"]
+            }
+        }
